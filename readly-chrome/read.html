@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/js/read.js" type="module"></script>
+
+    <title>Readly</title>
+    <style>
+        #textDisplay {
+            height: 400px;
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .sentence-box {
+            position: absolute;
+            left: 0;
+            right: 0;
+            transition: all 0.5s ease-out;
+            opacity: 0.3;
+            transform: translateY(100%);
+            margin: 0;
+            padding: 20px;
+            font-size: 1.2rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+        }
+
+        .sentence-box.active {
+            opacity: 1;
+            transform: translateY(0);
+            font-size: 1.8rem;
+            font-weight: 600;
+            background: rgba(255, 255, 255, 0.95);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+        }
+
+        .sentence-box.before {
+            opacity: 0.1;
+            transform: translateY(-100%);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container mt-4">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="text-center mb-3">
+                    <h2>Readly</h2>
+                </div>
+
+                <!-- Audio player -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <audio id="audioPlayer" class="d-none">
+                            <source src="" type="audio/mpeg">
+                            Your browser does not support the audio element.
+                        </audio>
+
+                        <!-- Custom audio controls -->
+                        <div class="custom-audio-player">
+                            <!-- Progress bar -->
+                            <div class="progress mb-3" style="height: 6px; cursor: pointer;" id="audioProgress">
+                                <div class="d-flex" style="width: 100%; height: 100%;" id="progressSegments">
+                                    <!-- Progress segments will be generated here -->
+                                </div>
+                            </div>
+
+                            <!-- Control buttons -->
+                            <div class="d-flex justify-content-center align-items-center gap-3">
+                                <button class="btn btn-outline-secondary" id="backwardBtn">
+                                    <i class="fas fa-backward-step"></i> Last
+                                </button>
+                                <button class="btn btn-primary" id="playPauseBtn">
+                                    <i class="fas fa-play"></i>
+                                </button>
+                                <button class="btn btn-outline-secondary" id="forwardBtn">
+                                    Next <i class="fas fa-forward-step"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Speed control -->
+                        <div class="d-flex justify-content-center mt-3">
+                            <div class="d-flex align-items-center" style="width: 300px;">
+                                <input type="range" class="form-range mx-2" min="0.5" max="3.0" step="0.25" value="1.0"
+                                    id="speedSlider">
+                                <span id="speedDisplay" class="ms-2" style="width: 80px;">1.0x</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Text display area -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <div id="textDisplay" class="text-center">
+                            <p id="targetText" class="lead">Loading text...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
