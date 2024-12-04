@@ -4,10 +4,12 @@ import hmac
 import hashlib
 import functools
 from typing import Any, Dict, Optional, Callable
+from functools import wraps
 
 from fastapi import Request, Response, WebSocket
 from starlette.datastructures import Headers
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.responses import JSONResponse
 from logger import logger
 from redis_cache import set_auth_user, get_auth_user
 
@@ -107,7 +109,7 @@ class HTTPSSessionMiddleware(SessionMiddleware):
         data_b64 = serialize_json(session)
         signature = create_signature(self.secret_key, data_b64)
         cookie_value = f"{data_b64}.{signature.decode()}"
-        logger.info(f"set cookie: {cookie_value[:20]}")
+        logger.debug(f"set cookie: {cookie_value[:20]}")
         set_auth_user(cookie_value, session)
 
         response.set_cookie(
@@ -189,3 +191,15 @@ class WebSocketAuthManager:
             return await func(websocket, *args, **kwargs)
 
         return wrapper
+
+
+def require_auth(func):
+    @wraps(func)
+    async def wrapper(request: Request, *args, **kwargs):
+        user = request.session.get("user")
+        if user is None:
+            return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+        logger.debug("Authorized Visit")
+        return await func(request, *args, **kwargs)
+
+    return wrapper

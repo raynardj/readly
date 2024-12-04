@@ -12,6 +12,16 @@ Install the folder `readly-chrome` as an unpacked extension in Chrome.
 ## Server Side
 Server side is using `FastAPI` (python) to run an HTTPS service
 
+### Have the sentence splitter model
 ```
 python -m spacy download en_core_web_sm
 ```
+
+### Initialize the database
+This is very temporary, just for testing. It should be migration code in the future.
+```python
+from sql_data import build_engine
+engine, init_db, drop_db = build_engine()
+init_db()
+```
+
