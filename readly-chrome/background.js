@@ -13,13 +13,14 @@ const getTextAndOpenNewTab = () => {
 
 
 // Listen for messages to open a new tab
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
     console.log('Text message received:', request);
     if (request.text) {
         // Generate a unique key
 
-        let uuid = crypto.randomUUID();
+        let uuid = crypto.randomUUID().substring(0, 8);
         const storageKey = 'readly_' + uuid;
+
         let store_data = {
             ts: new Date().toISOString().replace('T', ' ').substring(0, 19),
             text: request.text,
