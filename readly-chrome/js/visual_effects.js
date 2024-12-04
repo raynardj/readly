@@ -20,7 +20,7 @@ const updateSentenceVisibility = (play_idx) => {
             sentence.style.top = '50%';
             sentence.style.opacity = '1';
             sentence.style.background = 'rgba(255, 255, 255, 0.6)';
-            sentence.style.fontSize = '1.5rem';
+            sentence.style.fontSize = '1.0rem';
             sentence.style.fontWeight = '600';
             sentence.style.zIndex = totalSentences;
             sentence.style.filter = 'blur(0px)';  // No blur for active sentence
@@ -42,7 +42,7 @@ const updateSentenceVisibility = (play_idx) => {
             sentence.style.top = '50%';
             sentence.style.opacity = opacity;
             sentence.style.background = 'rgba(255, 255, 255, 0.6)';
-            sentence.style.fontSize = '1.2rem';
+            sentence.style.fontSize = '0.8rem';
             sentence.style.fontWeight = '400';
             sentence.style.zIndex = totalSentences - distance - 1;
             sentence.style.filter = `blur(${blurAmount}px)`;
@@ -63,7 +63,7 @@ const updateSentenceVisibility = (play_idx) => {
             sentence.style.top = '50%';
             sentence.style.opacity = opacity;
             sentence.style.background = 'rgba(255, 255, 255, 0.6)';
-            sentence.style.fontSize = '1.2rem';
+            sentence.style.fontSize = '0.8rem';
             sentence.style.fontWeight = '400';
             sentence.style.zIndex = totalSentences - distance - 1;
             sentence.style.filter = `blur(${blurAmount}px)`;

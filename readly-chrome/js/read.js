@@ -22,9 +22,9 @@ const fetch_text_metadata = async (text) => {
     and then measure the length of each sentence
     */
     let server_url = await get_server_url();
-    const response = await fetch(server_url + '/sentence_measure', {
+    const response = await fetch(server_url + `/sentence_measure/${storageKey}/`, {
         method: 'POST',
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, text_id: storageKey }),
     });
     let metadata = await response.json();
     build_progress_marks(metadata);
@@ -73,21 +73,66 @@ const build_progress_marks = (metadata) => {
     return progress_marks;
 }
 
+
+const fetch_text_entry = async (text_id) => {
+    /*
+    Fetch the text entry from the server
+    */
+    let server_url = await get_server_url();
+    const response = await fetch(server_url + `/text_entry/get/${text_id}/`);
+    let data = await response.json();
+
+    if (response.status === 404) {
+        return null;
+    } else {
+        return data;
+    }
+}
+
+const save_text_entry = async (text_id, text, url) => {
+    let server_url = await get_server_url();
+    let payload = {
+        text_id: text_id,
+        text: text,
+        url: url,
+    }
+
+    console.log({ log: "[SAVE] text entry", payload });
+
+    let fetch_res = await fetch(`${server_url}/text_entry/create/`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+    })
+
+    let data = await fetch_res.json();
+    return data;
+
+}
 if (storageKey) {
     // Retrieve the text using the key
     chrome.storage.local.get([storageKey], async function (result) {
-        const data = result[storageKey];
-        let { text, ts, url } = data;
+        const from_page_data = result[storageKey];
+        let { text, ts, url } = from_page_data;
         let user_profile = await get_user_profile();
         player_state.token = user_profile.token;
         player_state.sub = user_profile.sub;
         // console.log(user_profile);
         // Use the text
-        console.log(data);
+        console.log({ log: "[FROM PAGE] text entry", from_page_data });
+
+        let data = await fetch_text_entry(storageKey);
+        if (data === null) {
+            data = await save_text_entry(storageKey, text, url);
+        }
+        console.log({ log: "[RETRIEVED] text entry", data });
+
         document.querySelector('#targetText').textContent = data.text;
         let metadata = await fetch_text_metadata(data.text);
         player_state.metadata = metadata;
+
     });
+
+
 }
 
 
