@@ -22,6 +22,24 @@ def engine_to_session(func):
     return wrapper
 
 
+def object_to_dict(obj):
+    """
+    Convert SQLAlchemy model object to dictionary, handling datetime serialization
+    """
+    if obj is None:
+        return None
+
+    data = {}
+    for key, value in obj.__dict__.items():
+        if key.startswith("_"):
+            continue
+        if isinstance(value, datetime):
+            data[key] = value.isoformat()
+        else:
+            data[key] = value
+    return data
+
+
 @engine_to_session
 def create_text_entry(
     db: Union[Session, Engine],
@@ -58,7 +76,7 @@ def get_user_text_entries(db: Union[Session, Engine], sub: str, skip: int = 0, l
     """
     Get all text entries for a user with pagination
     """
-    return (
+    text_entry_list = (
         db.query(TextEntry)
         .filter(TextEntry.user_sub == sub)
         .order_by(TextEntry.created_at.desc())
@@ -66,6 +84,11 @@ def get_user_text_entries(db: Union[Session, Engine], sub: str, skip: int = 0, l
         .limit(limit)
         .all()
     )
+    result = []
+    for entry in text_entry_list:
+        row = object_to_dict(entry)
+        result.append(row)
+    return result
 
 
 @engine_to_session

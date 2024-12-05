@@ -4,12 +4,7 @@ import hmac
 import hashlib
 import functools
 from typing import Any, Dict, Optional, Callable
-from functools import wraps
 
-from fastapi import Request, Response, WebSocket
-from starlette.datastructures import Headers
-from starlette.middleware.sessions import SessionMiddleware
-from starlette.responses import JSONResponse
 from logger import logger
 from redis_cache import set_auth_user, get_auth_user
 
@@ -61,7 +56,7 @@ def create_signature(secret_key: bytes, data: str) -> bytes:
     )
 
 
-class HTTPSSessionMiddleware(SessionMiddleware):
+class HTTPSSessionMiddleware:
     def __init__(
         self,
         app,
@@ -75,51 +70,12 @@ class HTTPSSessionMiddleware(SessionMiddleware):
         self.max_age = max_age
 
     async def __call__(self, scope, receive, send):
-        """ASGI middleware implementation"""
+        """Process the request through middleware"""
         if scope["type"] != "http":
-            return await self.app(scope, receive, send)
-
-        request = Request(scope, receive)
-        session = self._load_session(request)
-
-        # Store session directly in scope
-        scope["session"] = session
-
-        async def send_wrapper(message):
-            if message["type"] == "http.response.start":
-                response = Response(status_code=message["status"], headers=Headers(raw=message["headers"]))
-                # Get potentially modified session from scope
-                self.save_session(scope["session"], response)
-                message["headers"] = response.raw_headers
-            await send(message)
-
-        await self.app(scope, receive, send_wrapper)
-
-    def _load_session(self, request: Request) -> Dict:
-        """Load and verify session from cookie"""
-        cookie = request.cookies.get(self.session_cookie)
-        return load_session(cookie, self.secret_key)
-
-    def save_session(self, session: Dict, response: Response) -> None:
-        """Save session data to cookie"""
-        if not session:
-            response.delete_cookie(self.session_cookie)
             return
 
-        data_b64 = serialize_json(session)
-        signature = create_signature(self.secret_key, data_b64)
-        cookie_value = f"{data_b64}.{signature.decode()}"
-        logger.debug(f"set cookie: {cookie_value[:20]}")
-        set_auth_user(cookie_value, session)
-
-        response.set_cookie(
-            key=self.session_cookie,
-            value=cookie_value,
-            max_age=self.max_age,
-            httponly=True,
-            secure=True,
-            samesite="lax",
-        )
+        session = scope.get("session", {})
+        scope["session"] = session
 
 
 class WebSocketAuthManager:
@@ -170,10 +126,8 @@ class WebSocketAuthManager:
 
         @functools.wraps(func)
         async def wrapper(websocket: WebSocket, *args, **kwargs):
-
-            # Try to get token from query parameters first
-            token = websocket.query_params["token"]
-            sub = websocket.query_params["sub"]
+            token = websocket.query_params.get("token")
+            sub = websocket.query_params.get("sub")
 
             if not token:
                 logger.error("No session token provided")
@@ -181,25 +135,12 @@ class WebSocketAuthManager:
                 return
 
             user_data = self.verify_session_token(token, sub)
-            if not user_data or len(user_data) == 0:
+            if not user_data:
                 logger.error(f"Invalid session token: {token}")
                 await self.auth_error_event(websocket)
                 return
 
-            # Add user data to websocket state
             websocket.state.user = user_data
             return await func(websocket, *args, **kwargs)
 
         return wrapper
-
-
-def require_auth(func):
-    @wraps(func)
-    async def wrapper(request: Request, *args, **kwargs):
-        user = request.session.get("user")
-        if user is None:
-            return JSONResponse(status_code=401, content={"error": "Unauthorized"})
-        logger.debug("Authorized Visit")
-        return await func(request, *args, **kwargs)
-
-    return wrapper

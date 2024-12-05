@@ -1,4 +1,5 @@
 import os
+import uuid
 
 
 def get_secret(key):
@@ -22,3 +23,5 @@ REDIS_HOST = "localhost"
 REDIS_PORT = 6379
 
 SQL_DATABASE_URI = "postgresql://readly:readly123@localhost:5432/readly"
+
+GUID = uuid.uuid4().hex
