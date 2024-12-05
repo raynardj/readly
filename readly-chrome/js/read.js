@@ -22,8 +22,11 @@ const fetch_text_metadata = async (text) => {
     and then measure the length of each sentence
     */
     let server_url = await get_server_url();
-    const response = await fetch(server_url + `/sentence_measure/${storageKey}/`, {
+    const response = await fetch(server_url + "/sentence_measure/", {
         method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ text, text_id: storageKey }),
     });
     let metadata = await response.json();
@@ -79,7 +82,7 @@ const fetch_text_entry = async (text_id) => {
     Fetch the text entry from the server
     */
     let server_url = await get_server_url();
-    const response = await fetch(server_url + `/text_entry/get/${text_id}/`);
+    const response = await fetch(server_url + `/text_entry/get/?text_id=${text_id}`);
     let data = await response.json();
 
     if (response.status === 404) {
@@ -99,7 +102,7 @@ const save_text_entry = async (text_id, text, url) => {
 
     console.log({ log: "[SAVE] text entry", payload });
 
-    let fetch_res = await fetch(`${server_url}/text_entry/create/`, {
+    let fetch_res = await fetch(`${server_url}/text_entry/create`, {
         method: 'POST',
         body: JSON.stringify(payload),
     })

@@ -1,3 +1,4 @@
+import { DEFAULT_SERVER_URL } from './constants.js';
 import { login_redirect, get_server_url } from './user.js';
 
 
@@ -21,7 +22,7 @@ const render_error = (error_msg) => {
 
 
 chrome.storage.sync.get(['serverURL'], function (result) {
-    const serverURL = result.serverURL || 'https://localhost:8000'
+    const serverURL = result.serverURL || DEFAULT_SERVER_URL
 
     fetch(`${serverURL}/my_profile`, {
         method: 'GET',

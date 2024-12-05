@@ -1,5 +1,5 @@
-const DEFAULT_SERVER_URL = 'https://localhost:8000';
-const WS_SERVER_URL = 'wss://localhost:8000';
+const DEFAULT_SERVER_URL = "https://localhost:8000";
+const WS_SERVER_URL = "wss://localhost:8000";
 const TRANSMISSION_RETRY_TIME = 3000;
 const BUFFER_SENTENCES = 2;
 

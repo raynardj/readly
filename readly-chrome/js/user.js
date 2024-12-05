@@ -14,11 +14,15 @@ async function login_redirect() {
     let parsed_query = new URLSearchParams(window.location.search);
 
     let key = parsed_query.get("key");
+    let redirect_url;
+    console.log({ log: "redirect_url", key, server_url })
     if (key) {
-        window.location.href = `${server_url}/login?extension_id=${chrome.runtime.id}&key=${key}`;
+        redirect_url = `${server_url}/login?extension_id=${chrome.runtime.id}&key=${key}`;
+
     } else {
-        window.location.href = `${server_url}/login?extension_id=${chrome.runtime.id}`;
+        redirect_url = `${server_url}/login?extension_id=${chrome.runtime.id}`;
     }
+    window.location.href = redirect_url;
 }
 
 
@@ -34,6 +38,7 @@ async function get_user_profile() {
     if (response.status === 200) {
         return data;
     } else if (response.status === 401) {
+
         await login_redirect();
     }
     throw new Error(data.error);
