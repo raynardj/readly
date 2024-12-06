@@ -2,7 +2,7 @@
 # from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse
 # from fastapi import Query
 
-from authlib.integrations.starlette_client import OAuth
+
 import base64
 from traceback import format_exc
 import argparse
@@ -34,7 +34,7 @@ from crud_data import (
     object_to_dict,
 )
 
-from utils import await_coroutine, sentence_tokenizer
+from utils import await_coroutine, sentence_tokenizer, oauth
 
 import time
 

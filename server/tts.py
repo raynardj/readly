@@ -1,3 +1,9 @@
+"""
+The purpose of this excercise is about network.
+Hence we're not building TTS model here, just ping external API (free for 200 usd)
+as proof of concept.
+"""
+
 # curl --request POST \
 #      --header "Content-Type: application/json" \
 #      --header "Authorization: Token DEEPGRAM_API_KEY" \
@@ -5,10 +11,9 @@
 #      --data '{"text":"Hello, how can I help you today?"}' \
 #      --url "https://api.deepgram.com/v1/speak?model=aura-asteria-en"
 
-
 # The above is the example curl code for TTS on deepgram.
 
-from typing import Iterator
+
 from logger import logger
 import httpx
 
