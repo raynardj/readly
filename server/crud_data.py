@@ -204,10 +204,15 @@ def get_tts_requests(
     limit: int = 10,
 ):
     """Get recent TTS requests for a user"""
-    return (
+    tts_requests = (
         db.query(TTSRequest)
         .filter(TTSRequest.user_sub == user_sub)
         .order_by(TTSRequest.created_at.desc())
         .limit(limit)
         .all()
     )
+
+    results = []
+    for tts_request in tts_requests:
+        results.append(object_to_dict(tts_request))
+    return results

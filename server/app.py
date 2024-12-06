@@ -1,19 +1,14 @@
-import abc
-
-# from fastapi import FastAPI, Request, HTTPException, Depends, WebSocket
+# from fastapi import FastAPI, Request, HTTPException, Depends
 # from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse
 # from fastapi import Query
 
 from authlib.integrations.starlette_client import OAuth
 import base64
-from websockets.exceptions import ConnectionClosed
 from traceback import format_exc
-import asyncio
-
-import spacy
+import argparse
 
 from tts import to_speech
-from constants import GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, READLY_SECRET_KEY
+from constants import READLY_SECRET_KEY
 
 from logger import logger
 from tcp_server import (
@@ -26,8 +21,9 @@ from tcp_server import (
     JWT,
 )
 
-# from session_manage import HTTPSSessionMiddleware, WebSocketAuthManager
 from sql_data import build_engine
+
+# the CRUD operations for the database
 from crud_data import (
     create_text_entry,
     get_text_entry,
@@ -38,48 +34,46 @@ from crud_data import (
     object_to_dict,
 )
 
+from utils import await_coroutine, sentence_tokenizer
+
 import time
 
-app = TCPServer()
+parser = argparse.ArgumentParser()
+parser.add_argument("--log_level", type=str, default="INFO")
+parser.add_argument("--n_workers", type=int, default=2)
+args = parser.parse_args()
+
+app = TCPServer(n_workers=args.n_workers)
 
 app.use(JWT, secret_key=READLY_SECRET_KEY)
 
 engine, init_db, drop_db = build_engine()
 
-oauth = OAuth()
-oauth.register(
-    name="google",
-    client_id=GOOGLE_CLIENT_ID,
-    client_secret=GOOGLE_CLIENT_SECRET,
-    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
-    client_kwargs={"scope": "openid email profile"},
-)
 
-# load only sentence tokenizer
-sentence_tokenizer = spacy.load("en_core_web_sm", disable=["ner", "parser"])
-sentence_tokenizer.add_pipe("sentencizer")
+@app.get("/")
+@require_auth
+def read_root():
+    return JSONResponse({"message": "Hello"})
 
 
-def await_coroutine(coroutine):
-    """
-    Helper function to await a coroutine in a synchronous context
-    """
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    try:
-        result = loop.run_until_complete(coroutine)
-        return result
-    except Exception as e:
-        logger.error(f"🔌 Traceback: {format_exc()}")
-        logger.error(f"Error in await_coroutine: {str(e)}")
-        return None
+@app.get("/naked")
+def naked(request: Request):
+    return JSONResponse({"message": "This is a naked endpoint, not protected by auth"})
 
 
 @app.get("/login")
 def login(request: Request):
+    """
+    Initiates the Google OAuth login flow.
+
+    Args:
+        request (Request): The incoming request object containing query parameters
+            - extension_id: Chrome extension ID
+            - key: Optional key parameter
+
+    Returns:
+        RedirectResponse: Redirects to Google OAuth consent screen
+    """
     extension_id = request.query_params.get("extension_id")
     key = request.query_params.get("key")
 
@@ -101,17 +95,22 @@ def login(request: Request):
 
 @app.get("/auth")
 def auth(request: Request):
-    code = request.query_params.get("code")
-    state = request.query_params.get("state")
-    # hd = request.query_params.get("hd")
-    # prompt = request.query_params.get("prompt")
-    print(
-        {
-            "code": code,
-            "state": state,
-        }
-    )
+    """
+    Handles the OAuth callback from Google authentication.
 
+    Args:
+        request (Request): The incoming request containing:
+            - code: OAuth authorization code
+            - state: OAuth state parameter
+            - extension_id: Chrome extension ID
+            - key: Optional key parameter
+
+    Returns:
+        RedirectResponse: Redirects to extension page with user session
+
+    Raises:
+        Exception: If authentication fails
+    """
     try:
         token = await_coroutine(oauth.google.authorize_access_token(request))
         userinfo = await_coroutine(oauth.google.userinfo(token=token))
@@ -119,6 +118,9 @@ def auth(request: Request):
         logger.error(f"🔌 Traceback: {format_exc()}")
         logger.error(f"Auth error: {str(e)}")
         raise
+
+    if userinfo is None:
+        return JSONResponse({"error": "500 Internal Server Error"}, status=500)
 
     # Add user login
     user_sub = userinfo["sub"]
@@ -139,6 +141,17 @@ def auth(request: Request):
 
 @app.get("/redirect")
 def redirect(request: Request):
+    """
+    Redirects user back to Chrome extension after successful authentication.
+
+    Args:
+        request (Request): The incoming request containing:
+            - extension_id: Chrome extension ID
+            - key: Optional key parameter
+
+    Returns:
+        RedirectResponse: Redirects to appropriate extension page
+    """
     extension_id = request.query_params.get("extension_id")
     key = request.query_params.get("key")
     if key is None:
@@ -149,16 +162,30 @@ def redirect(request: Request):
 
 @app.get("/close_window")
 def close_window(request: Request):
+    """
+    Returns HTML that closes the current browser window.
+
+    Args:
+        request (Request): The incoming request
+
+    Returns:
+        HTMLResponse: Script to close window
+    """
     return HTMLResponse(content="<script>window.close();</script>")
-
-
-def get_current_user(request: Request):
-    userinfo = request.session.get("user")
-    return userinfo
 
 
 @app.get("/logout")
 def logout(request: Request):
+    """
+    Logs out the current user by clearing their session.
+
+    Args:
+        request (Request): The incoming request containing:
+            - extension_id: Optional Chrome extension ID
+
+    Returns:
+        RedirectResponse: Redirects to login page
+    """
     request.session.clear()
     extension_id = request.query_params.get("extension_id")
     if extension_id is None:
@@ -167,17 +194,19 @@ def logout(request: Request):
         return RedirectResponse(url=f"{request.base_url}/login?extension_id={extension_id}")
 
 
-@app.get("/")
-@require_auth
-def read_root():
-    return {"message": "Hello"}
-
-
 @app.get("/my_profile")
 @require_auth
 def my_profile(request: Request):
     """
-    Return the current user's profile
+    Returns the current user's profile information.
+
+    Args:
+        request (Request): The authenticated request
+
+    Returns:
+        JSONResponse: User profile data including:
+            - Google profile information
+            - Truncated session token
     """
     user = request.session.get("user")
     user["token"] = request.cookies.get("session")[:20]
@@ -189,11 +218,21 @@ class EventType:
 
 
 @app.post("/text_entry/create/")
+@require_auth
 def text_entry_create(
     request: Request,
 ):
     """
-    Create a new text entry
+    Creates a new text entry in the database.
+
+    Args:
+        request (Request): The authenticated request containing:
+            - text_id: Unique identifier for the text
+            - text: The full text content
+            - url: Optional source URL
+
+    Returns:
+        JSONResponse: Created text entry object
     """
     data = request.json()
     user = request.session.get("user")
@@ -217,6 +256,20 @@ def text_entry_create(
 def text_entry_get(
     request: Request,
 ):
+    """
+    Retrieves a specific text entry by ID.
+
+    Args:
+        request (Request): The authenticated request containing:
+            - text_id: ID of text entry to retrieve
+
+    Returns:
+        JSONResponse: Text entry object if found
+
+    Raises:
+        400: If text_id is missing
+        404: If text entry not found
+    """
     text_id = request.query_params.get("text_id")
     if not text_id:
         return JSONResponse({"error": "text_id is required"}, status=400)
@@ -233,7 +286,23 @@ def sentence_measure(
     request: Request,
 ):
     """
-    Cut the text into sentences
+    Splits text into sentences and returns sentence metrics.
+
+    Args:
+        request (Request): The authenticated request containing:
+            - text_id: ID of text to process
+
+    Returns:
+        JSONResponse: Object containing:
+            - text_id: Original text ID
+            - sentences: List of sentence strings
+            - sentence_lengths: List of sentence character counts
+            - user_email: Email of requesting user
+            - num_sentences: Total number of sentences
+
+    Raises:
+        400: If text_id missing or no text content
+        404: If text entry not found
     """
     data = request.json()
     text_id = data.get("text_id")
@@ -271,88 +340,62 @@ def sentence_measure(
     )
 
 
-# async def speak_event(
-#     websocket: WebSocket,
-#     data: dict,
-#     user: dict,
-# ):
-#     """
-#     Handle the speak event
-#     """
-#     text_data = data["text_data"]
-#     sentences = text_data["sentences"]
-#     text_id = text_data["text_id"]
+@app.post("/speak")
+@require_auth
+def speak(
+    request: Request,
+):
+    """
+    Converts text to speech for a specific sentence.
 
-#     # my decision is not to set the speed here but use the default one
-#     # on frontend, the speed is controlled by the slider
-#     # speed: float = data.get("speed", 1.0)
-#     speed = 1.0
-#     play_idx = data.get("play_idx", 0)
-#     sentence_text = sentences[play_idx]
+    Args:
+        request (Request): The authenticated request containing:
+            - text_data: Object with sentences and text_id
+            - play_idx: Index of sentence to convert (default: 0)
 
-#     audio_id = f"{text_id}-{play_idx:03d}"
-#     email = user.get("email")
-#     logger.info(f"⭐️ <{email}> : {audio_id}")
-#     start_time = time.time()
-#     audio_bytes = to_speech(sentence_text)
-#     processing_time_ms = int((time.time() - start_time) * 1000)
+    Returns:
+        JSONResponse: Object containing:
+            - audio_id: Unique ID for the audio
+            - play_idx: Index of converted sentence
+            - data: Base64 encoded audio bytes
+    """
 
-#     # We need to keep track of the TTS requests
-#     # Like the number of requests, the total characters, and the average processing time
-#     create_tts_request(
-#         engine,
-#         text_entry_id=text_id,
-#         user_sub=user["sub"],
-#         sentence_text=sentence_text,
-#         sentence_index=play_idx,
-#         audio_id=audio_id,
-#         character_count=len(sentence_text),
-#         processing_time_ms=processing_time_ms,
-#     )
+    data = request.json()
+    user = request.session.get("user")
+    text_data = data["text_data"]
+    sentences = text_data["sentences"]
+    text_id = text_data["text_id"]
 
-#     await websocket.send_json(
-#         {
-#             "event_type": "audio_chunk",
-#             "audio_id": audio_id,
-#             "play_idx": play_idx,
-#             "speed": speed,
-#             "data": base64.b64encode(audio_bytes).decode("utf-8"),
-#         }
-#     )
+    play_idx = data.get("play_idx", 0)
+    sentence_text = sentences[play_idx]
 
+    audio_id = f"{text_id}-{play_idx:03d}"
+    email = user.get("email")
+    logger.info(f"⭐️ <{email}> : {audio_id}")
+    start_time = time.time()
+    audio_bytes = to_speech(sentence_text)
+    processing_time_ms = int((time.time() - start_time) * 1000)
 
-# @app.websocket("/speak")
-# @socket_auth_manager.auth
-# async def text_to_speech_socket(websocket: WebSocket):
-#     """
-#     WebSocket endpoint for text-to-speech streaming
-#     """
-#     await websocket.accept()
+    # We need to keep track of the TTS requests (for dashboard and possibly billing)
+    # Like the number of requests, the total characters, and the average processing time
+    create_tts_request(
+        engine,
+        text_entry_id=text_id,
+        user_sub=user["sub"],
+        sentence_text=sentence_text,
+        sentence_index=play_idx,
+        audio_id=audio_id,
+        character_count=len(sentence_text),
+        processing_time_ms=processing_time_ms,
+    )
 
-#     user = websocket.state.user.get("user")
-#     if user is None:
-#         logger.error("No user found in websocket state")
-#         await websocket.close()
-#         return
-#     # logger.info(f"💎 Connected user: {user.get('email')}")
-
-#     try:
-#         while True:
-#             # Receive text from client
-#             data = await websocket.receive_json()
-#             # logger.info(f"💎 Received data: {data}")
-#             event_type = data["event_type"]
-#             if event_type == EventType.SPEAK:
-#                 await speak_event(websocket, data, user)
-#             else:
-#                 logger.warning(f"Unknown event type: {event_type}")
-
-#     except ConnectionClosed:  # Changed from WebSocketDisconnect
-#         logger.info(f"Client disconnected: {user.get('email')}")
-#     except Exception as e:
-#         logger.error(f"Error for user {user.get('email')}: {str(e)}")
-#         logger.error(f"🔌 Traceback: {format_exc()}")
-#         await websocket.close()
+    return JSONResponse(
+        {
+            "audio_id": audio_id,
+            "play_idx": play_idx,
+            "data": base64.b64encode(audio_bytes).decode("utf-8"),
+        }
+    )
 
 
 # # ============== for dashboard =================
@@ -360,7 +403,13 @@ def sentence_measure(
 @require_auth
 def get_text_entries(request: Request):
     """
-    Get all text entries for the current user
+    Retrieves all text entries for the current user.
+
+    Args:
+        request (Request): The authenticated request
+
+    Returns:
+        JSONResponse: List of text entry objects
     """
     user = request.session.get("user")
     entries = get_user_text_entries(engine, user["sub"])
@@ -368,13 +417,25 @@ def get_text_entries(request: Request):
     return JSONResponse(entries)
 
 
-# @app.get("/tts_requests/")
-# @require_auth
-# async def get_tts_requests_api(request: Request):
-#     user = request.session.get("user")
-#     requests = get_tts_requests(engine, user["sub"])
-#     return requests
+@app.get("/tts_requests/")
+@require_auth
+def get_tts_requests_api(request: Request):
+    """
+    Retrieves all text-to-speech requests for the current user.
+
+    Args:
+        request (Request): The authenticated request
+
+    Returns:
+        JSONResponse: List of TTS request objects
+    """
+    user = request.session.get("user")
+    requests = get_tts_requests(engine, user["sub"])
+    return JSONResponse(requests)
 
 
-if __name__ == "__main__":
-    app.run(logger_level="DEBUG", cert_file="cert.pem", key_file="key.pem")
+app.run(
+    logger_level=args.log_level,
+    cert_file="cert.pem",
+    key_file="key.pem",
+)
