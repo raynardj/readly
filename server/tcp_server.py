@@ -310,7 +310,7 @@ class TCPServer:
             try:
                 client_socket = self.ssl_context.wrap_socket(client_socket, server_side=True)
             except ssl.SSLError as e:
-                logger.error(f"HTTPS/ SSL: {e}")
+                logger.debug(f"HTTPS/ SSL: {e}")
                 client_socket.close()
                 return None
 
