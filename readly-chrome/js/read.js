@@ -102,7 +102,7 @@ const save_text_entry = async (text_id, text, url) => {
 
     console.log({ log: "[SAVE] text entry", payload });
 
-    let fetch_res = await fetch(`${server_url}/text_entry/create`, {
+    let fetch_res = await fetch(`${server_url}/text_entry/create/`, {
         method: 'POST',
         body: JSON.stringify(payload),
     })
@@ -176,6 +176,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${text_id}-${play_idx_str}`;
     }
 
+    const fetch_speak_api = async (payload) => {
+        let server_url = await get_server_url();
+        const response = await fetch(server_url + `/speak`, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+        let res_payload = await response.json();
+        return res_payload;
+    }
+
     const event_type_audio_chunk = async (message) => {
         let { audio_id, play_idx, data } = message;
 
@@ -191,87 +201,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    const message_event_handler = async (data) => {
-        let { event_type } = data;
-        if (event_type === 'audio_chunk') {
-            await event_type_audio_chunk(data);
-        } else if (event_type === 'authentication_error') {
-            await login_redirect();
-        } else {
-            console.error(`[🔌🚨 SOCKET: ERROR]unknown event type: ${event_type}`);
-        }
-    }
-
-    const set_up_socket_message = (socket) => {
-        socket.onmessage = async (event) => {
-            const message = JSON.parse(event.data);
-            console.info(`[🔌🎵 SOCKET: MESSAGE]`);
-            console.log(message);
-            await message_event_handler(message);
-        }
-    }
-
-    const build_socket = () => {
-        /*
-        Build a WebSocket connection to the server
-        */
-        const socket = new WebSocket(
-            WS_SERVER_URL + `/speak?token=${player_state.token}&sub=${player_state.sub}`
-        );
-
-        console.log('[🔌 SOCKET:CONNECTING]');
-
-        set_up_socket_message(socket);
-        socket.onopen = () => {
-            console.log('[🔌✨ SOCKET:OPENED]');
-            player_state.socket_ready = true;
-        }
-        socket.onerror = (error) => {
-            console.error('[🔌🚨 SOCKET:ERROR]', error);
-            player_state.playing = false;
-            player_state.socket_ready = false;
-        };
-
-        socket.onclose = () => {
-            console.log('[🔌💤 SOCKET:CLOSED]');
-            player_state.playing = false;
-            player_state.socket_ready = false;
-        };
-
-        return socket;
-    }
-
-    const get_socket = () => {
-        if (player_state.socket === undefined) {
-            player_state.socket = build_socket();
-        } else if (player_state.socket.readyState === WebSocket.CLOSED) {
-            console.info("[🔌✨ SOCKET:RESTART]");
-            player_state.socket = build_socket();
-        }
-        return player_state.socket;
-    }
-
     const build_audio_chunk_buffer = async (play_idx, speed) => {
         /*
         Build the buffer for the audio chunk
         by sending the `speak` event to the server
         When ever the audio chunk shots back,
-        it will be handled by the message_event_handler
         and saved to the chrome storage
         */
-        let socket = get_socket();
-        // Wait for socket to be ready before sending
-        while (!player_state.socket_ready) {
-            console.debug("[🔌 SOCKET:WAITING] socket ready");
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
-        console.info(`[🔌 SOCKET: speak]${play_idx} ${speed}x`);
-        socket.send(JSON.stringify({
+        console.info(`[🔌 FETCH: speak]${play_idx} ${speed}x`);
+
+        let payload = {
             event_type: 'speak',
             text_data: player_state.metadata,
             speed,
             play_idx,
-        }));
+        }
+
+        let res_payload = await fetch_speak_api(payload);
+        let { data, audio_id } = res_payload;
+        chrome.storage.local.set({ [audio_id]: data });
+
+        // if it's not playing right now, we set the color to loaded buffer color
+        if (play_idx !== player_state.play_idx) {
+            set_progress_segment_color(play_idx, COLORS.loaded);
+        }
+
         player_state.on_transmission[play_idx] = new Date().getTime();
     }
 
